@@ -131,6 +131,11 @@ function buildCalendarPrompt(options: {
     X: 280,
     LINKEDIN: 3000,
     INSTAGRAM: 2200,
+    TIKTOK: 2200,
+    YOUTUBE: 5000,
+    PINTEREST: 500,
+    BLUESKY: 300,
+    THREADS: 500,
   };
 
   prompt += `\n\nCharacter limit: ${limits[options.platform]} characters.`;

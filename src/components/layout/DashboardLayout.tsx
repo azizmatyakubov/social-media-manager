@@ -132,6 +132,21 @@ const teamNavigation = [
   },
 ];
 
+// Platform options for social media connections - exported for use in other components
+export const platformOptions = [
+  { name: "X (Twitter)", value: "X", color: "#000000", icon: "X" },
+  { name: "LinkedIn", value: "LINKEDIN", color: "#0A66C2", icon: "in" },
+  { name: "Instagram", value: "INSTAGRAM", color: "#E4405F", icon: "IG" },
+  { name: "TikTok", value: "TIKTOK", color: "#000000", icon: "TT" },
+  { name: "YouTube", value: "YOUTUBE", color: "#FF0000", icon: "YT" },
+  { name: "Pinterest", value: "PINTEREST", color: "#E60023", icon: "P" },
+  { name: "Bluesky", value: "BLUESKY", color: "#0085FF", icon: "BS" },
+  { name: "Threads", value: "THREADS", color: "#000000", icon: "TH" },
+] as const;
+
+export type PlatformOption = typeof platformOptions[number];
+export type PlatformValue = PlatformOption["value"];
+
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
