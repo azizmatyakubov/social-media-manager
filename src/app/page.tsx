@@ -221,7 +221,13 @@ const comparisonData = [
 ];
 
 export default async function HomePage() {
-  const session = await getServerSession(authOptions);
+  // Try to get session, but don't fail if database is unavailable
+  let session = null;
+  try {
+    session = await getServerSession(authOptions);
+  } catch {
+    // Database connection might not be available - continue without session
+  }
 
   if (session) {
     redirect("/dashboard");
