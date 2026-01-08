@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       where: { id: postId },
       data: {
         status: "POSTED",
-        xPostId: tweet.id,
+        platformPostId: tweet.id,
         postedAt: new Date(),
       },
     });

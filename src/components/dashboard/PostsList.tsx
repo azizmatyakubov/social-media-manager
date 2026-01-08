@@ -133,9 +133,9 @@ export function PostsList({ posts, isXConnected }: PostsListProps) {
                   </span>
                 </button>
               )}
-              {post.xPostId && (
+              {post.platformPostId && (
                 <a
-                  href={`https://x.com/i/status/${post.xPostId}`}
+                  href={`https://x.com/i/status/${post.platformPostId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2 bg-white/5 text-zinc-300 text-sm font-medium rounded-lg hover:bg-white/10 transition flex items-center gap-1.5"

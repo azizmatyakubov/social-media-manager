@@ -20,6 +20,8 @@ model User {
   accounts              Account[]
   sessions              Session[]
   xAccounts             XAccount[]
+  linkedInAccounts      LinkedInAccount[]
+  instagramAccounts     InstagramAccount[]
   postingConfig         PostingConfig?
   posts                 Post[]
   threads               Thread[]
@@ -27,6 +29,17 @@ model User {
   voiceProfile          VoiceProfile?
   notificationSettings  NotificationSettings?
   emailNotifications    EmailNotification[]
+  contentCalendars      ContentCalendar[]
+  workspaceMembers      WorkspaceMember[]
+  ownedWorkspaces       Workspace[]
+  abTests               ABTest[]
+  generatedImages       GeneratedImage[]
+  mentions              Mention[]
+  competitors           Competitor[]
+  dailyMetrics          DailyMetrics[]
+  repurposedContent     RepurposedContent[]
+  integrations          Integration[]
+  activityLogs          ActivityLog[]
 }
 
 model Account {
@@ -65,6 +78,10 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// ============================================
+// SOCIAL ACCOUNTS - Multi-Platform Support
+// ============================================
+
 model XAccount {
   id             String   @id @default(cuid())
   userId         String
@@ -83,6 +100,48 @@ model XAccount {
   @@index([userId])
 }
 
+model LinkedInAccount {
+  id             String   @id @default(cuid())
+  userId         String
+  linkedInId     String   @unique
+  name           String
+  email          String?
+  profileUrl     String?
+  accessToken    String   @db.Text
+  refreshToken   String?  @db.Text
+  tokenExpiresAt DateTime?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@index([userId])
+}
+
+model InstagramAccount {
+  id              String   @id @default(cuid())
+  userId          String
+  instagramId     String   @unique
+  username        String
+  accessToken     String   @db.Text
+  tokenExpiresAt  DateTime?
+  accountType     String   @default("BUSINESS") // BUSINESS or CREATOR
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@index([userId])
+}
+
+// ============================================
+// POSTS & CONTENT
+// ============================================
+
 model PostingConfig {
   id           String   @id @default(cuid())
   userId       String   @unique
@@ -99,41 +158,65 @@ model PostingConfig {
 }
 
 model Post {
-  id           String     @id @default(cuid())
-  userId       String
-  xAccountId   String?
-  threadId     String?
-  threadIndex  Int?
-  content      String     @db.Text
-  xPostId      String?
-  status       PostStatus @default(PENDING)
-  error        String?    @db.Text
-  scheduledFor DateTime?
-  postedAt     DateTime?
-  // Engagement metrics (updated from X API)
-  likes        Int        @default(0)
-  retweets     Int        @default(0)
-  replies      Int        @default(0)
-  impressions  Int        @default(0)
+  id                String     @id @default(cuid())
+  userId            String
+  workspaceId       String?
+  // Multi-platform support
+  platform          Platform   @default(X)
+  xAccountId        String?
+  linkedInAccountId String?
+  instagramAccountId String?
+  // Thread support
+  threadId          String?
+  threadIndex       Int?
+  // Content
+  content           String     @db.Text
+  platformPostId    String?    // ID from the platform (xPostId, linkedInPostId, etc.)
+  status            PostStatus @default(PENDING)
+  error             String?    @db.Text
+  scheduledFor      DateTime?
+  postedAt          DateTime?
+  // Engagement metrics
+  likes             Int        @default(0)
+  retweets          Int        @default(0)
+  replies           Int        @default(0)
+  impressions       Int        @default(0)
+  shares            Int        @default(0)
+  clicks            Int        @default(0)
   // Viral prediction score (0-100)
-  viralScore   Int?
+  viralScore        Int?
   // Evergreen recycling
-  isEvergreen  Boolean    @default(false)
-  lastRecycled DateTime?
-  recycleCount Int        @default(0)
+  isEvergreen       Boolean    @default(false)
+  lastRecycled      DateTime?
+  recycleCount      Int        @default(0)
   // Media
-  mediaUrls    String[]   @default([])
-  mediaType    MediaType?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  mediaUrls         String[]   @default([])
+  mediaType         MediaType?
+  // A/B Testing
+  abTestId          String?
+  abVariant         String?    // "A", "B", "C", etc.
+  // Approval workflow
+  approvalStatus    ApprovalStatus @default(APPROVED)
+  approvedBy        String?
+  approvedAt        DateTime?
+  // Timestamps
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  xAccount XAccount? @relation(fields: [xAccountId], references: [id])
-  thread   Thread?   @relation(fields: [threadId], references: [id])
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace        Workspace?        @relation(fields: [workspaceId], references: [id])
+  xAccount         XAccount?         @relation(fields: [xAccountId], references: [id])
+  linkedInAccount  LinkedInAccount?  @relation(fields: [linkedInAccountId], references: [id])
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id])
+  thread           Thread?           @relation(fields: [threadId], references: [id])
+  abTest           ABTest?           @relation(fields: [abTestId], references: [id])
 
   @@index([status, scheduledFor])
   @@index([userId, isEvergreen])
   @@index([threadId])
+  @@index([platform, status])
+  @@index([workspaceId])
+  @@index([abTestId])
 }
 
 model Thread {
@@ -155,23 +238,18 @@ model Thread {
 model VoiceProfile {
   id              String   @id @default(cuid())
   userId          String   @unique
-  // Analyzed writing characteristics
   avgSentenceLen  Float?
   avgWordLen      Float?
-  emojiUsage      Float?   // 0-1 frequency
-  hashtagUsage    Float?   // 0-1 frequency
-  questionUsage   Float?   // 0-1 frequency
-  exclamationUse  Float?   // 0-1 frequency
-  // Common patterns
+  emojiUsage      Float?
+  hashtagUsage    Float?
+  questionUsage   Float?
+  exclamationUse  Float?
   commonPhrases   String[] @default([])
   commonEmojis    String[] @default([])
   commonHashtags  String[] @default([])
-  // Style descriptors
   toneKeywords    String[] @default([])
-  // Raw analysis from AI
   styleAnalysis   String?  @db.Text
   samplePosts     String[] @default([])
-  // Metadata
   postsAnalyzed   Int      @default(0)
   lastAnalyzed    DateTime?
   createdAt       DateTime @default(now())
@@ -183,12 +261,439 @@ model VoiceProfile {
 model TrendCache {
   id        String   @id @default(cuid())
   category  String
-  trends    Json     // Array of {name, volume, url}
+  trends    Json
   region    String   @default("US")
   fetchedAt DateTime @default(now())
 
   @@unique([category, region])
   @@index([fetchedAt])
+}
+
+// ============================================
+// AI CONTENT CALENDAR
+// ============================================
+
+model ContentCalendar {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String?
+  name        String   @default("My Calendar")
+  description String?
+  timezone    String   @default("UTC")
+  isActive    Boolean  @default(true)
+  // Auto-generation settings
+  autoGenerate      Boolean  @default(false)
+  postsPerDay       Int      @default(3)
+  preferredTimes    String[] @default(["09:00", "13:00", "18:00"])
+  contentThemes     String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace?        @relation(fields: [workspaceId], references: [id])
+  slots       CalendarSlot[]
+
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model CalendarSlot {
+  id           String       @id @default(cuid())
+  calendarId   String
+  date         DateTime
+  time         String       // "HH:mm" format
+  platform     Platform     @default(X)
+  // Content
+  content      String?      @db.Text
+  suggestedContent String?  @db.Text // AI-generated suggestion
+  contentTheme String?
+  // Status
+  status       SlotStatus   @default(EMPTY)
+  postId       String?      // Link to actual post when published
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  calendar ContentCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId, date])
+  @@index([date, status])
+}
+
+// ============================================
+// TEAM COLLABORATION
+// ============================================
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  ownerId     String
+  logo        String?
+  // Settings
+  requireApproval Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members         WorkspaceMember[]
+  invites         WorkspaceInvite[]
+  posts           Post[]
+  calendars       ContentCalendar[]
+  approvalRequests ApprovalRequest[]
+  activityLogs    ActivityLog[]
+  webhooks        Webhook[]
+
+  @@index([ownerId])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model WorkspaceInvite {
+  id          String   @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole @default(MEMBER)
+  token       String   @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([token])
+}
+
+model ApprovalRequest {
+  id          String         @id @default(cuid())
+  workspaceId String
+  postId      String
+  requesterId String
+  status      ApprovalStatus @default(PENDING)
+  reviewerId  String?
+  reviewedAt  DateTime?
+  comment     String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([requesterId])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String?
+  action      String   // "post.created", "post.published", "member.invited", etc.
+  entityType  String   // "post", "member", "settings", etc.
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([userId, createdAt])
+}
+
+// ============================================
+// A/B TESTING
+// ============================================
+
+model ABTest {
+  id          String       @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  platform    Platform     @default(X)
+  status      ABTestStatus @default(DRAFT)
+  // Test configuration
+  metric      String       @default("engagement") // engagement, clicks, impressions
+  duration    Int          @default(24) // hours
+  // Results
+  winnerId    String?      // ID of winning variant post
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variants ABTestVariant[]
+  posts    Post[]
+
+  @@index([userId, status])
+}
+
+model ABTestVariant {
+  id        String   @id @default(cuid())
+  testId    String
+  name      String   // "A", "B", "C"
+  content   String   @db.Text
+  mediaUrls String[] @default([])
+  // Results
+  impressions Int    @default(0)
+  engagements Int    @default(0)
+  clicks      Int    @default(0)
+  createdAt DateTime @default(now())
+
+  test ABTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
+}
+
+// ============================================
+// AI IMAGE GENERATION
+// ============================================
+
+model GeneratedImage {
+  id          String   @id @default(cuid())
+  userId      String
+  prompt      String   @db.Text
+  revisedPrompt String? @db.Text
+  imageUrl    String
+  size        String   @default("1024x1024")
+  style       String   @default("vivid") // vivid or natural
+  model       String   @default("dall-e-3")
+  // Usage tracking
+  postId      String?  // If used in a post
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ============================================
+// SMART REPLY ASSISTANT
+// ============================================
+
+model Mention {
+  id          String        @id @default(cuid())
+  userId      String
+  platform    Platform      @default(X)
+  platformId  String        // ID of the mention/reply on platform
+  authorId    String        // Platform user ID of author
+  authorName  String
+  authorUsername String
+  content     String        @db.Text
+  inReplyTo   String?       // If this is a reply to user's post
+  sentiment   Sentiment?
+  status      MentionStatus @default(UNREAD)
+  repliedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies SuggestedReply[]
+
+  @@unique([platform, platformId])
+  @@index([userId, status])
+  @@index([createdAt])
+}
+
+model SuggestedReply {
+  id        String   @id @default(cuid())
+  mentionId String
+  content   String   @db.Text
+  tone      String   @default("friendly") // friendly, professional, witty, etc.
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  mention Mention @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+
+  @@index([mentionId])
+}
+
+// ============================================
+// COMPETITOR TRACKING
+// ============================================
+
+model Competitor {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    Platform @default(X)
+  platformId  String   // Their platform user ID
+  username    String
+  name        String?
+  profileUrl  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  snapshots CompetitorSnapshot[]
+
+  @@unique([userId, platform, platformId])
+  @@index([userId, isActive])
+}
+
+model CompetitorSnapshot {
+  id           String   @id @default(cuid())
+  competitorId String
+  // Metrics at snapshot time
+  followers    Int      @default(0)
+  following    Int      @default(0)
+  totalPosts   Int      @default(0)
+  // Recent engagement (last 30 days average)
+  avgLikes     Float    @default(0)
+  avgRetweets  Float    @default(0)
+  avgReplies   Float    @default(0)
+  engagementRate Float  @default(0)
+  // Top posts
+  topPosts     Json?    // Array of recent high-performing posts
+  // Posting patterns
+  postsPerDay  Float    @default(0)
+  peakHours    Int[]    @default([])
+  topHashtags  String[] @default([])
+  createdAt    DateTime @default(now())
+
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, createdAt])
+}
+
+// ============================================
+// ADVANCED ANALYTICS
+// ============================================
+
+model DailyMetrics {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    Platform @default(X)
+  date        DateTime @db.Date
+  // Growth
+  followers   Int      @default(0)
+  following   Int      @default(0)
+  followerChange Int   @default(0)
+  // Engagement
+  totalLikes       Int @default(0)
+  totalRetweets    Int @default(0)
+  totalReplies     Int @default(0)
+  totalImpressions Int @default(0)
+  totalClicks      Int @default(0)
+  // Content
+  postsPublished   Int @default(0)
+  engagementRate   Float @default(0)
+  // Best performing
+  topPostId   String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, date])
+  @@index([userId, date])
+}
+
+// ============================================
+// CONTENT REPURPOSING
+// ============================================
+
+model RepurposedContent {
+  id             String         @id @default(cuid())
+  userId         String
+  // Source
+  sourceType     ContentType
+  sourceContent  String         @db.Text
+  sourcePostId   String?
+  // Output
+  outputType     ContentType
+  outputContent  String         @db.Text
+  outputPlatform Platform?
+  // Status
+  status         RepurposeStatus @default(DRAFT)
+  postId         String?        // If published
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ============================================
+// INTEGRATION HUB
+// ============================================
+
+model Integration {
+  id          String          @id @default(cuid())
+  userId      String
+  workspaceId String?
+  type        IntegrationType
+  name        String
+  // OAuth/API credentials
+  accessToken String?         @db.Text
+  refreshToken String?        @db.Text
+  apiKey      String?         @db.Text
+  // Configuration
+  config      Json?
+  isActive    Boolean         @default(true)
+  lastSyncAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId, isActive])
+}
+
+model Webhook {
+  id          String        @id @default(cuid())
+  workspaceId String?
+  name        String
+  url         String
+  secret      String        // For signature verification
+  events      String[]      // ["post.published", "post.failed", etc.]
+  isActive    Boolean       @default(true)
+  lastTriggeredAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace   Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs        WebhookEvent[]
+
+  @@index([workspaceId, isActive])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  webhookId   String
+  event       String
+  payload     Json
+  status      Int      // HTTP status code
+  response    String?  @db.Text
+  attempts    Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, createdAt])
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Platform {
+  X
+  LINKEDIN
+  INSTAGRAM
 }
 
 enum PostStatus {
@@ -204,7 +709,78 @@ enum MediaType {
   GIF
 }
 
-// Subscription & Billing
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SlotStatus {
+  EMPTY
+  SUGGESTED
+  FILLED
+  PUBLISHED
+  SKIPPED
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  MEMBER
+  VIEWER
+}
+
+enum ABTestStatus {
+  DRAFT
+  RUNNING
+  COMPLETED
+  CANCELED
+}
+
+enum MentionStatus {
+  UNREAD
+  READ
+  REPLIED
+  IGNORED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+enum ContentType {
+  TWEET
+  THREAD
+  LINKEDIN_POST
+  INSTAGRAM_CAPTION
+  BLOG_POST
+  VIDEO_SCRIPT
+  NEWSLETTER
+}
+
+enum RepurposeStatus {
+  DRAFT
+  READY
+  PUBLISHED
+}
+
+enum IntegrationType {
+  NOTION
+  SLACK
+  ZAPIER
+  GOOGLE_SHEETS
+  AIRTABLE
+  DISCORD
+  CUSTOM_WEBHOOK
+}
+
+// ============================================
+// SUBSCRIPTION & BILLING
+// ============================================
+
 model Subscription {
   id                   String             @id @default(cuid())
   userId               String             @unique
@@ -259,24 +835,28 @@ enum UsageType {
   AI_GENERATIONS
   SCHEDULED_POSTS
   X_ACCOUNTS
+  IMAGE_GENERATIONS
+  TEAM_MEMBERS
 }
 
-// Email Notifications
+// ============================================
+// EMAIL NOTIFICATIONS
+// ============================================
+
 model NotificationSettings {
   id                     String   @id @default(cuid())
   userId                 String   @unique
-  // Notification types
   postPublished          Boolean  @default(true)
   postFailed             Boolean  @default(true)
   weeklyDigest           Boolean  @default(true)
-  engagementAlerts       Boolean  @default(false)  // High engagement notifications
-  trendingAlerts         Boolean  @default(false)  // When a post goes viral
-  recycleReminders       Boolean  @default(true)   // Evergreen post reminders
-  // Frequency settings
-  digestDay              String   @default("monday")  // Day for weekly digest
+  engagementAlerts       Boolean  @default(false)
+  trendingAlerts         Boolean  @default(false)
+  recycleReminders       Boolean  @default(true)
+  mentionAlerts          Boolean  @default(true)
+  competitorAlerts       Boolean  @default(false)
+  digestDay              String   @default("monday")
   digestTime             String   @default("09:00")
   timezone               String   @default("UTC")
-  // Status
   unsubscribedAll        Boolean  @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -293,7 +873,7 @@ model EmailNotification {
   status      EmailStatus      @default(PENDING)
   sentAt      DateTime?
   error       String?
-  metadata    Json?            // Additional data (postId, etc.)
+  metadata    Json?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -312,6 +892,10 @@ enum NotificationType {
   RECYCLE_REMINDER
   WELCOME
   SUBSCRIPTION_CHANGE
+  MENTION_ALERT
+  COMPETITOR_ALERT
+  APPROVAL_REQUEST
+  APPROVAL_COMPLETE
 }
 
 enum EmailStatus {

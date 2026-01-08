@@ -60,9 +60,9 @@ export function ActivityPanel({ posts, todayPosts, weekPosts }: ActivityPanelPro
                     {post.postedAt ? formatTimeAgo(new Date(post.postedAt)) : "Just now"}
                   </p>
                 </div>
-                {post.xPostId && (
+                {post.platformPostId && (
                   <a
-                    href={`https://x.com/i/status/${post.xPostId}`}
+                    href={`https://x.com/i/status/${post.platformPostId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-zinc-500 hover:text-indigo-400 transition flex-shrink-0"

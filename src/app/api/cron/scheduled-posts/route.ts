@@ -119,7 +119,7 @@ export async function GET(request: Request) {
           where: { id: post.id },
           data: {
             status: "POSTED",
-            xPostId: tweet.id,
+            platformPostId: tweet.id,
             postedAt: new Date(),
           },
         });
@@ -127,7 +127,7 @@ export async function GET(request: Request) {
         results.push({
           postId: post.id,
           status: "success",
-          xPostId: tweet.id,
+          platformPostId: tweet.id,
         });
 
         console.log(`[Cron:Scheduled] Successfully posted ${post.id}: ${tweet.id}`);

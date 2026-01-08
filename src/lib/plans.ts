@@ -20,6 +20,8 @@ export interface Plan {
     aiGenerations: number; // per month, -1 = unlimited
     scheduledPosts: number; // per month, -1 = unlimited
     xAccounts: number;
+    imageGenerations: number; // per month, -1 = unlimited
+    teamMembers: number; // -1 = unlimited
   };
   features: PlanFeature[];
 }
@@ -44,6 +46,8 @@ export const PLANS: Record<PlanType, Plan> = {
       aiGenerations: 10,
       scheduledPosts: 15,
       xAccounts: 1,
+      imageGenerations: 5,
+      teamMembers: 0,
     },
     features: [
       { name: "AI post generation", included: true, limit: "10/month" },
@@ -68,6 +72,8 @@ export const PLANS: Record<PlanType, Plan> = {
       aiGenerations: 100,
       scheduledPosts: -1, // unlimited
       xAccounts: 1,
+      imageGenerations: 25,
+      teamMembers: 0,
     },
     features: [
       { name: "AI post generation", included: true, limit: "100/month", highlight: true },
@@ -93,6 +99,8 @@ export const PLANS: Record<PlanType, Plan> = {
       aiGenerations: 500,
       scheduledPosts: -1,
       xAccounts: 3,
+      imageGenerations: 100,
+      teamMembers: 3,
     },
     features: [
       { name: "AI post generation", included: true, limit: "500/month", highlight: true },
@@ -120,6 +128,8 @@ export const PLANS: Record<PlanType, Plan> = {
       aiGenerations: -1, // unlimited
       scheduledPosts: -1,
       xAccounts: 10,
+      imageGenerations: -1, // unlimited
+      teamMembers: -1, // unlimited
     },
     features: [
       { name: "AI post generation", included: true, limit: "Unlimited", highlight: true },

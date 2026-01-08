@@ -139,6 +139,55 @@ const templates: Record<NotificationType, (data: Record<string, unknown>) => { s
       <p><a href="${APP_URL}/dashboard/settings" style="color: #1DA1F2;">Manage subscription →</a></p>
     `,
   }),
+
+  MENTION_ALERT: (data) => ({
+    subject: `💬 New mention from @${data.authorUsername}`,
+    body: `
+      <h2>You've Been Mentioned!</h2>
+      <p>@${data.authorUsername} mentioned you:</p>
+      <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 0;">"${data.content}"</p>
+      </div>
+      <p><a href="${APP_URL}/dashboard/mentions" style="color: #1DA1F2;">View and reply →</a></p>
+    `,
+  }),
+
+  COMPETITOR_ALERT: (data) => ({
+    subject: `📊 Competitor Update: ${data.competitorName}`,
+    body: `
+      <h2>Competitor Activity Alert</h2>
+      <p>Notable activity from ${data.competitorName}:</p>
+      <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 0;">${data.alertMessage}</p>
+      </div>
+      <p><a href="${APP_URL}/dashboard/competitors" style="color: #1DA1F2;">View competitor analysis →</a></p>
+    `,
+  }),
+
+  APPROVAL_REQUEST: (data) => ({
+    subject: `⏳ New post awaiting your approval`,
+    body: `
+      <h2>Approval Request</h2>
+      <p>${data.requesterName} has submitted a post for your approval:</p>
+      <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 0;">"${data.content}"</p>
+      </div>
+      <p><a href="${APP_URL}/dashboard/team" style="color: #1DA1F2;">Review and approve →</a></p>
+    `,
+  }),
+
+  APPROVAL_COMPLETE: (data) => ({
+    subject: `${data.approved ? '✅' : '❌'} Your post was ${data.approved ? 'approved' : 'rejected'}`,
+    body: `
+      <h2>Post ${data.approved ? 'Approved' : 'Rejected'}</h2>
+      <p>${data.reviewerName} has ${data.approved ? 'approved' : 'rejected'} your post:</p>
+      <div style="background: ${data.approved ? '#f0fdf4' : '#fff5f5'}; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid ${data.approved ? '#22c55e' : '#ef4444'};">
+        <p style="margin: 0;">"${data.content}"</p>
+      </div>
+      ${data.feedback ? `<p><strong>Feedback:</strong> ${data.feedback}</p>` : ''}
+      <p><a href="${APP_URL}/dashboard" style="color: #1DA1F2;">View in dashboard →</a></p>
+    `,
+  }),
 };
 
 // Wrap email body in base template
@@ -193,6 +242,10 @@ export async function queueEmail(
       RECYCLE_REMINDER: "recycleReminders",
       WELCOME: null, // Always send
       SUBSCRIPTION_CHANGE: null, // Always send
+      MENTION_ALERT: "engagementAlerts", // Use engagement alerts setting
+      COMPETITOR_ALERT: "trendingAlerts", // Use trending alerts setting
+      APPROVAL_REQUEST: null, // Always send
+      APPROVAL_COMPLETE: null, // Always send
     };
 
     const settingKey = typeSettingsMap[type];

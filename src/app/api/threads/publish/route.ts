@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     // Publish thread to X
     let previousTweetId: string | null = null;
-    const publishedPosts: { id: string; xPostId: string }[] = [];
+    const publishedPosts: { id: string; platformPostId: string }[] = [];
 
     for (const post of thread.posts) {
       try {
@@ -101,14 +101,14 @@ export async function POST(request: NextRequest) {
         await prisma.post.update({
           where: { id: post.id },
           data: {
-            xPostId: data.data.id,
+            platformPostId: data.data.id,
             status: PostStatus.POSTED,
             postedAt: new Date(),
             xAccountId: account.id,
           },
         });
 
-        publishedPosts.push({ id: post.id, xPostId: data.data.id });
+        publishedPosts.push({ id: post.id, platformPostId: data.data.id });
 
         // Small delay between tweets to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       success: true,
       threadId: thread.id,
       publishedPosts,
-      firstTweetUrl: `https://twitter.com/${account.xUsername}/status/${publishedPosts[0]?.xPostId}`,
+      firstTweetUrl: `https://twitter.com/${account.xUsername}/status/${publishedPosts[0]?.platformPostId}`,
     });
   } catch (error) {
     console.error("Publish thread error:", error);

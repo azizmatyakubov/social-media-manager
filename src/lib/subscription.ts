@@ -14,6 +14,8 @@ export interface SubscriptionWithUsage {
     aiGenerations: { count: number; limit: number };
     scheduledPosts: { count: number; limit: number };
     xAccounts: { count: number; limit: number };
+    imageGenerations: { count: number; limit: number };
+    teamMembers: { count: number; limit: number };
   };
 }
 
@@ -64,17 +66,21 @@ async function ensureUsageRecords(subscriptionId: string, plan: PlanType) {
   const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-  const usageTypes: UsageType[] = ["AI_GENERATIONS", "SCHEDULED_POSTS", "X_ACCOUNTS"];
+  const usageTypes: UsageType[] = ["AI_GENERATIONS", "SCHEDULED_POSTS", "X_ACCOUNTS", "IMAGE_GENERATIONS", "TEAM_MEMBERS"];
   const limitMap: Record<UsageType, number> = {
     AI_GENERATIONS: limits.aiGenerations,
     SCHEDULED_POSTS: limits.scheduledPosts,
     X_ACCOUNTS: limits.xAccounts,
+    IMAGE_GENERATIONS: limits.imageGenerations,
+    TEAM_MEMBERS: limits.teamMembers,
   };
 
   const usageRecords = {
     aiGenerations: { count: 0, limit: limits.aiGenerations },
     scheduledPosts: { count: 0, limit: limits.scheduledPosts },
     xAccounts: { count: 0, limit: limits.xAccounts },
+    imageGenerations: { count: 0, limit: limits.imageGenerations },
+    teamMembers: { count: 0, limit: limits.teamMembers },
   };
 
   for (const type of usageTypes) {
@@ -89,8 +95,14 @@ async function ensureUsageRecords(subscriptionId: string, plan: PlanType) {
     });
 
     if (existing) {
-      const key = type === "AI_GENERATIONS" ? "aiGenerations" :
-                  type === "SCHEDULED_POSTS" ? "scheduledPosts" : "xAccounts";
+      const keyMap: Record<UsageType, keyof typeof usageRecords> = {
+        AI_GENERATIONS: "aiGenerations",
+        SCHEDULED_POSTS: "scheduledPosts",
+        X_ACCOUNTS: "xAccounts",
+        IMAGE_GENERATIONS: "imageGenerations",
+        TEAM_MEMBERS: "teamMembers",
+      };
+      const key = keyMap[type];
       usageRecords[key] = { count: existing.count, limit: existing.limit };
     } else {
       await prisma.usage.create({

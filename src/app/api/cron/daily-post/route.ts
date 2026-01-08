@@ -175,7 +175,7 @@ export async function GET(request: Request) {
             userId: config.userId,
             content,
             status: "POSTED",
-            xPostId: tweet.id,
+            platformPostId: tweet.id,
             postedAt: new Date(),
           },
         });
@@ -183,7 +183,7 @@ export async function GET(request: Request) {
         results.push({
           userId: config.userId,
           status: "success",
-          xPostId: tweet.id,
+          platformPostId: tweet.id,
         });
 
         console.log(`[Cron] Successfully posted for user ${config.userId}: ${tweet.id}`);
