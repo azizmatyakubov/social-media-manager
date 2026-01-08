@@ -1,0 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts              Account[]
+  sessions              Session[]
+  xAccounts             XAccount[]
+  postingConfig         PostingConfig?
+  posts                 Post[]
+  threads               Thread[]
+  subscription          Subscription?
+  voiceProfile          VoiceProfile?
+  notificationSettings  NotificationSettings?
+  emailNotifications    EmailNotification[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model XAccount {
+  id             String   @id @default(cuid())
+  userId         String
+  xUserId        String   @unique
+  xUsername      String
+  accessToken    String   @db.Text
+  refreshToken   String?  @db.Text
+  tokenExpiresAt DateTime?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@index([userId])
+}
+
+model PostingConfig {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  instructions String   @db.Text
+  tone         String   @default("professional")
+  topics       String[] @default([])
+  postingTime  String   @default("09:00")
+  timezone     String   @default("UTC")
+  isActive     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id           String     @id @default(cuid())
+  userId       String
+  xAccountId   String?
+  threadId     String?
+  threadIndex  Int?
+  content      String     @db.Text
+  xPostId      String?
+  status       PostStatus @default(PENDING)
+  error        String?    @db.Text
+  scheduledFor DateTime?
+  postedAt     DateTime?
+  // Engagement metrics (updated from X API)
+  likes        Int        @default(0)
+  retweets     Int        @default(0)
+  replies      Int        @default(0)
+  impressions  Int        @default(0)
+  // Viral prediction score (0-100)
+  viralScore   Int?
+  // Evergreen recycling
+  isEvergreen  Boolean    @default(false)
+  lastRecycled DateTime?
+  recycleCount Int        @default(0)
+  // Media
+  mediaUrls    String[]   @default([])
+  mediaType    MediaType?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xAccount XAccount? @relation(fields: [xAccountId], references: [id])
+  thread   Thread?   @relation(fields: [threadId], references: [id])
+
+  @@index([status, scheduledFor])
+  @@index([userId, isEvergreen])
+  @@index([threadId])
+}
+
+model Thread {
+  id          String       @id @default(cuid())
+  userId      String
+  title       String?
+  status      PostStatus   @default(PENDING)
+  scheduledFor DateTime?
+  postedAt    DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@index([userId, status])
+}
+
+model VoiceProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  // Analyzed writing characteristics
+  avgSentenceLen  Float?
+  avgWordLen      Float?
+  emojiUsage      Float?   // 0-1 frequency
+  hashtagUsage    Float?   // 0-1 frequency
+  questionUsage   Float?   // 0-1 frequency
+  exclamationUse  Float?   // 0-1 frequency
+  // Common patterns
+  commonPhrases   String[] @default([])
+  commonEmojis    String[] @default([])
+  commonHashtags  String[] @default([])
+  // Style descriptors
+  toneKeywords    String[] @default([])
+  // Raw analysis from AI
+  styleAnalysis   String?  @db.Text
+  samplePosts     String[] @default([])
+  // Metadata
+  postsAnalyzed   Int      @default(0)
+  lastAnalyzed    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TrendCache {
+  id        String   @id @default(cuid())
+  category  String
+  trends    Json     // Array of {name, volume, url}
+  region    String   @default("US")
+  fetchedAt DateTime @default(now())
+
+  @@unique([category, region])
+  @@index([fetchedAt])
+}
+
+enum PostStatus {
+  PENDING
+  SCHEDULED
+  POSTED
+  FAILED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  GIF
+}
+
+// Subscription & Billing
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  plan                 PlanType           @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usage Usage[]
+}
+
+model Usage {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  type           UsageType
+  count          Int      @default(0)
+  limit          Int
+  periodStart    DateTime
+  periodEnd      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, type, periodStart])
+  @@index([subscriptionId, type])
+}
+
+enum PlanType {
+  FREE
+  CREATOR
+  PRO
+  BUSINESS
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  TRIALING
+}
+
+enum UsageType {
+  AI_GENERATIONS
+  SCHEDULED_POSTS
+  X_ACCOUNTS
+}
+
+// Email Notifications
+model NotificationSettings {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  // Notification types
+  postPublished          Boolean  @default(true)
+  postFailed             Boolean  @default(true)
+  weeklyDigest           Boolean  @default(true)
+  engagementAlerts       Boolean  @default(false)  // High engagement notifications
+  trendingAlerts         Boolean  @default(false)  // When a post goes viral
+  recycleReminders       Boolean  @default(true)   // Evergreen post reminders
+  // Frequency settings
+  digestDay              String   @default("monday")  // Day for weekly digest
+  digestTime             String   @default("09:00")
+  timezone               String   @default("UTC")
+  // Status
+  unsubscribedAll        Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailNotification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  subject     String
+  body        String           @db.Text
+  status      EmailStatus      @default(PENDING)
+  sentAt      DateTime?
+  error       String?
+  metadata    Json?            // Additional data (postId, etc.)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+enum NotificationType {
+  POST_PUBLISHED
+  POST_FAILED
+  WEEKLY_DIGEST
+  ENGAGEMENT_ALERT
+  TRENDING_ALERT
+  RECYCLE_REMINDER
+  WELCOME
+  SUBSCRIPTION_CHANGE
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
