@@ -5,9 +5,18 @@ import { prisma } from "@/lib/prisma";
 import { upgradeSubscription } from "@/lib/subscription";
 import { PlanType } from "@prisma/client";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Lazy initialization to avoid build-time errors
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeClient) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  }
+  return stripeClient;
+}
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+function getWebhookSecret(): string {
+  return process.env.STRIPE_WEBHOOK_SECRET!;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +31,7 @@ export async function POST(request: NextRequest) {
     let event: Stripe.Event;
 
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = getStripe().webhooks.constructEvent(body, signature, getWebhookSecret());
     } catch (err) {
       console.error("Webhook signature verification failed:", err);
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -83,7 +92,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const customerId = session.customer as string;
 
   // Retrieve the subscription to get period details
-  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const stripeSubscription = await getStripe().subscriptions.retrieve(subscriptionId);
   const subscriptionData = stripeSubscription as unknown as {
     items: { data: Array<{ price: { id: string } }> };
     current_period_start: number;
