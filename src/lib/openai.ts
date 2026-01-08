@@ -1,8 +1,16 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization to avoid build-time errors
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 interface GeneratePostParams {
   instructions: string;
@@ -68,7 +76,7 @@ Topics to consider: ${topicsStr}
 
 Generate only the post text, nothing else. No quotes around it.`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 150,
     messages: [
@@ -124,7 +132,7 @@ Related topics: ${topicsStr}
 
 Return ONLY a JSON array of ${postCount} posts.`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 1000,
     response_format: { type: "json_object" },
@@ -182,7 +190,7 @@ Also provide 1-3 brief suggestions to improve the post.
 
 Return JSON with: score (0-100), factors (object with each score), suggestions (array of strings)`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 300,
     response_format: { type: "json_object" },
@@ -235,7 +243,7 @@ Return JSON with:
 - improvements: array of 2-3 suggestions for improvement
 - optimalPostingTips: array of 1-2 tips for similar future posts`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 400,
     response_format: { type: "json_object" },
@@ -287,7 +295,7 @@ Guidelines:
 - Keep under 280 characters
 - Be timely but not desperate for engagement`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 150,
     messages: [

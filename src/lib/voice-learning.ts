@@ -2,9 +2,17 @@ import OpenAI from "openai";
 import { prisma } from "./prisma";
 import { PostStatus } from "@prisma/client";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization to avoid build-time errors
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 interface VoiceAnalysis {
   avgSentenceLen: number;
@@ -133,7 +141,7 @@ async function analyzeWithAI(posts: string[]): Promise<{
 }> {
   const samplePosts = posts.slice(0, 20).join("\n---\n");
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       {
