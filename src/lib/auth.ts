@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { verifyTwoFactorCode } from "./two-factor";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
@@ -12,6 +13,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        twoFactorCode: { label: "2FA Code", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -20,6 +22,13 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            password: true,
+            twoFactorEnabled: true,
+          },
         });
 
         if (!user || !user.password) {
@@ -33,6 +42,20 @@ export const authOptions: NextAuthOptions = {
 
         if (!isPasswordValid) {
           throw new Error("Invalid credentials");
+        }
+
+        // Check if 2FA is enabled
+        if (user.twoFactorEnabled) {
+          // If no 2FA code provided, signal that 2FA is required
+          if (!credentials.twoFactorCode) {
+            throw new Error("2FA_REQUIRED");
+          }
+
+          // Verify the 2FA code
+          const isValid = await verifyTwoFactorCode(user.id, credentials.twoFactorCode);
+          if (!isValid) {
+            throw new Error("Invalid 2FA code");
+          }
         }
 
         return {

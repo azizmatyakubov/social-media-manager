@@ -1,11 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generatePost, predictViralScore } from "@/lib/openai";
 import { canPerformAction, incrementUsage, hasFeatureAccess } from "@/lib/subscription";
+import { aiApiMiddleware } from "@/lib/api-middleware";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // Apply rate limiting for AI endpoints
+  const middleware = await aiApiMiddleware(request);
+  if (!middleware.success) {
+    return middleware.response;
+  }
+
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {

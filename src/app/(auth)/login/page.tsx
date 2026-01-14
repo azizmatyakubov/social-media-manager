@@ -9,6 +9,9 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [savedCredentials, setSavedCredentials] = useState({ email: "", password: "" });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -26,11 +29,49 @@ export default function LoginPage() {
     });
 
     if (result?.error) {
-      setError("Invalid email or password");
+      if (result.error === "2FA_REQUIRED") {
+        // Save credentials and show 2FA form
+        setSavedCredentials({ email, password });
+        setShowTwoFactor(true);
+        setLoading(false);
+      } else {
+        setError("Invalid email or password");
+        setLoading(false);
+      }
+    } else {
+      router.push("/dashboard");
+    }
+  };
+
+  const handleTwoFactorSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    const result = await signIn("credentials", {
+      email: savedCredentials.email,
+      password: savedCredentials.password,
+      twoFactorCode: twoFactorCode,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      if (result.error === "Invalid 2FA code") {
+        setError("Invalid verification code. Please try again.");
+      } else {
+        setError("Authentication failed. Please try again.");
+      }
       setLoading(false);
     } else {
       router.push("/dashboard");
     }
+  };
+
+  const handleBackToLogin = () => {
+    setShowTwoFactor(false);
+    setTwoFactorCode("");
+    setSavedCredentials({ email: "", password: "" });
+    setError("");
   };
 
   return (
@@ -102,57 +143,132 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          <h2 className="text-3xl font-bold tracking-tight mb-2">Welcome back</h2>
-          <p className="text-zinc-400 mb-8">Sign in to your account to continue</p>
+          {!showTwoFactor ? (
+            <>
+              <h2 className="text-3xl font-bold tracking-tight mb-2">Welcome back</h2>
+              <p className="text-zinc-400 mb-8">Sign in to your account to continue</p>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {error}
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {error && (
+                  <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {error}
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-zinc-300 mb-2">
+                    Email address
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition"
+                    placeholder="you@example.com"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label htmlFor="password" className="block text-sm font-medium text-zinc-300">
+                      Password
+                    </label>
+                    <Link href="/forgot-password" className="text-sm text-indigo-400 hover:text-indigo-300 transition">
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition"
+                    placeholder="Enter your password"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 btn-premium rounded-xl text-white font-medium relative overflow-hidden disabled:opacity-50"
+                >
+                  <span className="relative z-10">{loading ? "Signing in..." : "Sign in"}</span>
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <button
+                  onClick={handleBackToLogin}
+                  className="p-2 rounded-lg hover:bg-white/5 transition"
+                >
+                  <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div>
+                  <h2 className="text-3xl font-bold tracking-tight">Two-Factor Authentication</h2>
+                  <p className="text-zinc-400 mt-1">Enter the code from your authenticator app</p>
+                </div>
               </div>
-            )}
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-zinc-300 mb-2">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition"
-                placeholder="you@example.com"
-              />
-            </div>
+              <form onSubmit={handleTwoFactorSubmit} className="space-y-5">
+                {error && (
+                  <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {error}
+                  </div>
+                )}
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-zinc-300 mb-2">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition"
-                placeholder="Enter your password"
-              />
-            </div>
+                <div>
+                  <label htmlFor="twoFactorCode" className="block text-sm font-medium text-zinc-300 mb-2">
+                    Authentication Code
+                  </label>
+                  <input
+                    id="twoFactorCode"
+                    name="twoFactorCode"
+                    type="text"
+                    autoComplete="one-time-code"
+                    required
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-white text-center text-2xl font-mono tracking-widest placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition"
+                    placeholder="000000"
+                    maxLength={6}
+                    autoFocus
+                  />
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Open your authenticator app and enter the 6-digit code, or use a backup code.
+                  </p>
+                </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 btn-premium rounded-xl text-white font-medium relative overflow-hidden disabled:opacity-50"
-            >
-              <span className="relative z-10">{loading ? "Signing in..." : "Sign in"}</span>
-            </button>
-          </form>
+                <button
+                  type="submit"
+                  disabled={loading || twoFactorCode.length !== 6}
+                  className="w-full py-3.5 btn-premium rounded-xl text-white font-medium relative overflow-hidden disabled:opacity-50"
+                >
+                  <span className="relative z-10">{loading ? "Verifying..." : "Verify and Sign in"}</span>
+                </button>
+              </form>
+
+              <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-sm text-zinc-400">
+                  <span className="font-medium text-zinc-300">Lost access to your authenticator?</span>
+                  <br />
+                  You can use one of your backup codes to sign in.
+                </p>
+              </div>
+            </>
+          )}
 
           <div className="mt-8 pt-8 border-t border-white/5 text-center">
             <p className="text-zinc-400">

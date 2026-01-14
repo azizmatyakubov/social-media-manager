@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { SettingsForm } from "@/components/dashboard/SettingsForm";
 import { XConnectionCard } from "@/components/dashboard/XConnectionCard";
 import { SubscriptionCard } from "@/components/dashboard/SubscriptionCard";
+import { TwoFactorCard } from "@/components/dashboard/TwoFactorCard";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -94,6 +95,12 @@ export default async function SettingsPage({ searchParams }: PageProps) {
       <section>
         <h2 className="text-xl font-semibold mb-4">Subscription & Billing</h2>
         <SubscriptionCard />
+      </section>
+
+      {/* Security */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">Security</h2>
+        <TwoFactorCard />
       </section>
 
       {/* X Account Connection */}

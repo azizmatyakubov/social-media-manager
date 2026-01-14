@@ -68,12 +68,12 @@ export async function POST(request: NextRequest) {
     // Increment usage
     await incrementUsage(session.user.id, "AI_GENERATIONS");
 
+    // Generate a title from the topic
+    const title = topic.length > 50 ? topic.slice(0, 47) + "..." : topic;
+
     return NextResponse.json({
-      posts: posts.map((content, index) => ({
-        content,
-        index,
-        charCount: content.length,
-      })),
+      posts, // Array of strings
+      title,
       totalPosts: posts.length,
       usage: {
         current: usageCheck.current + 1,

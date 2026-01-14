@@ -188,6 +188,24 @@ const templates: Record<NotificationType, (data: Record<string, unknown>) => { s
       <p><a href="${APP_URL}/dashboard" style="color: #1DA1F2;">View in dashboard →</a></p>
     `,
   }),
+
+  PASSWORD_RESET: (data) => ({
+    subject: `🔐 Reset your password`,
+    body: `
+      <h2>Password Reset Request</h2>
+      <p>We received a request to reset your password. Click the button below to create a new password:</p>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${data.resetUrl}" style="display: inline-block; background: #4F46E5; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Reset Password
+        </a>
+      </div>
+      <p style="color: #666; font-size: 14px;">This link will expire in 1 hour.</p>
+      <p style="color: #666; font-size: 14px;">If you didn't request this, you can safely ignore this email.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="color: #999; font-size: 12px;">If the button doesn't work, copy and paste this URL into your browser:</p>
+      <p style="color: #999; font-size: 12px; word-break: break-all;">${data.resetUrl}</p>
+    `,
+  }),
 };
 
 // Wrap email body in base template
@@ -246,6 +264,7 @@ export async function queueEmail(
       COMPETITOR_ALERT: "trendingAlerts", // Use trending alerts setting
       APPROVAL_REQUEST: null, // Always send
       APPROVAL_COMPLETE: null, // Always send
+      PASSWORD_RESET: null, // Always send
     };
 
     const settingKey = typeSettingsMap[type];

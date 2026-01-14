@@ -16,6 +16,10 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  // Two-Factor Authentication
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorSecret   String?  @db.Text
+  twoFactorBackupCodes String[] @default([])
 
   accounts              Account[]
   sessions              Session[]
@@ -55,6 +59,14 @@ model User {
   savedViralTweets      SavedViralTweet[]
   websiteAnalytics      WebsiteAnalytics[]
   brandReports          BrandReport[]
+  replyTemplates        ReplyTemplate[]
+  linkInBioPages        LinkInBioPage[]
+  evergreenSchedules    EvergreenSchedule[]
+  utmLinks              UTMLink[]
+  utmPresets            UTMPreset[]
+  mediaAssets           MediaAsset[]
+  mediaFolders          MediaFolder[]
+  campaigns             Campaign[]
 }
 
 model Account {
@@ -91,6 +103,17 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
 }
 
 // ============================================
@@ -314,6 +337,7 @@ model Post {
   abTest           ABTest?           @relation(fields: [abTestId], references: [id])
   category         ContentCategory?  @relation(fields: [categoryId], references: [id])
   conditionalRule  ConditionalRule?  @relation(fields: [conditionalRuleId], references: [id])
+  approvalRequest  ApprovalRequest?
 
   @@index([status, scheduledFor])
   @@index([userId, isEvergreen])
@@ -623,6 +647,95 @@ model SuggestedReply {
   mention Mention @relation(fields: [mentionId], references: [id], onDelete: Cascade)
 
   @@index([mentionId])
+}
+
+model ReplyTemplate {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  content     String   @db.Text
+  category    String   @default("general") // general, support, sales, thanks, greeting
+  shortcut    String?  // Keyboard shortcut like "/thanks"
+  variables   String[] @default([]) // Variables like {name}, {product}
+  tone        String   @default("friendly")
+  platform    Platform?
+  usedCount   Int      @default(0)
+  lastUsedAt  DateTime?
+  isFavorite  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shortcut])
+  @@index([userId, category])
+  @@index([userId, isFavorite])
+}
+
+// ============================================
+// LINK-IN-BIO
+// ============================================
+
+model LinkInBioPage {
+  id              String   @id @default(cuid())
+  userId          String
+  slug            String   @unique // e.g., "johndoe" -> autopost.com/l/johndoe
+  title           String
+  bio             String?  @db.Text
+  // Profile
+  avatarUrl       String?
+  backgroundImage String?
+  // Theme/Styling
+  theme           String   @default("default") // default, minimal, gradient, dark, neon
+  primaryColor    String   @default("#6366F1")
+  secondaryColor  String   @default("#8B5CF6")
+  backgroundColor String   @default("#000000")
+  textColor       String   @default("#FFFFFF")
+  buttonStyle     String   @default("rounded") // rounded, pill, square
+  fontFamily      String   @default("Inter")
+  // Social links (displayed as icons)
+  socialLinks     Json?    // { twitter: "url", instagram: "url", ... }
+  // Analytics
+  totalViews      Int      @default(0)
+  totalClicks     Int      @default(0)
+  // SEO
+  metaTitle       String?
+  metaDescription String?  @db.Text
+  // Status
+  isPublished     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links LinkInBioLink[]
+
+  @@index([userId])
+  @@index([slug])
+}
+
+model LinkInBioLink {
+  id          String   @id @default(cuid())
+  pageId      String
+  title       String
+  url         String
+  icon        String?  // Icon name or emoji
+  thumbnail   String?  // Thumbnail image URL
+  position    Int      @default(0)
+  // Analytics
+  clicks      Int      @default(0)
+  // Scheduling
+  isVisible   Boolean  @default(true)
+  startDate   DateTime?
+  endDate     DateTime?
+  // Status
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  page LinkInBioPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, position])
 }
 
 // ============================================
@@ -1443,10 +1556,325 @@ enum NotificationType {
   COMPETITOR_ALERT
   APPROVAL_REQUEST
   APPROVAL_COMPLETE
+  PASSWORD_RESET
 }
 
 enum EmailStatus {
   PENDING
   SENT
   FAILED
+}
+
+// Evergreen Content Recycler
+model EvergreenSchedule {
+  id              String    @id @default(cuid())
+  userId          String
+  name            String
+  description     String?   @db.Text
+  isActive        Boolean   @default(true)
+
+  // Selection criteria
+  minEngagement   Int       @default(0)         // Minimum total engagement (likes + shares + comments)
+  minImpressions  Int       @default(0)
+  platforms       String[]  @default([])        // Filter by platforms
+  categoryIds     String[]  @default([])        // Filter by content categories
+  excludeHashtags String[]  @default([])        // Hashtags to exclude
+  includeHashtags String[]  @default([])        // Must have these hashtags
+
+  // Recycling settings
+  minDaysBetween  Int       @default(30)        // Minimum days between recycling same content
+  maxRecycleCount Int       @default(5)         // Max times a post can be recycled
+  varyContent     Boolean   @default(true)      // Slightly vary content on recycle
+
+  // Scheduling
+  postsPerDay     Int       @default(1)         // How many evergreen posts per day
+  preferredTimes  String[]  @default([])        // Preferred times (e.g., ["09:00", "14:00", "18:00"])
+  activeDays      Int[]     @default([0, 1, 2, 3, 4, 5, 6])  // Days of week (0=Sunday)
+  timezone        String    @default("UTC")
+
+  // Stats
+  totalRecycled   Int       @default(0)
+  lastRunAt       DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+model EvergreenLog {
+  id                  String   @id @default(cuid())
+  userId              String
+  scheduleId          String?
+  originalPostId      String
+  recycledPostId      String?
+
+  status              String   @default("pending") // pending, success, failed
+  errorMessage        String?  @db.Text
+  variationType       String?  // "original", "paraphrased", "reformatted"
+
+  originalContent     String   @db.Text
+  recycledContent     String?  @db.Text
+
+  createdAt           DateTime @default(now())
+
+  @@index([userId])
+  @@index([scheduleId])
+  @@index([originalPostId])
+}
+
+// UTM Link Builder
+model UTMLink {
+  id          String   @id @default(cuid())
+  userId      String
+  originalUrl String   @db.Text
+  fullUrl     String   @db.Text
+  shortCode   String?  @unique
+  source      String
+  medium      String
+  campaign    String
+  term        String?
+  content     String?
+  clicks      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([campaign])
+  @@index([shortCode])
+}
+
+model UTMPreset {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  source     String
+  medium     String
+  campaign   String
+  term       String?
+  content    String?
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Content Library / Asset Manager
+model MediaAsset {
+  id          String      @id @default(cuid())
+  userId      String
+  folderId    String?
+  name        String
+  url         String      @db.Text
+  type        MediaAssetType
+  mimeType    String?
+  size        Int?        // File size in bytes
+  width       Int?        // For images/videos
+  height      Int?        // For images/videos
+  duration    Int?        // For videos (seconds)
+  tags        String[]    @default([])
+  altText     String?     @db.Text
+  usageCount  Int         @default(0)
+  lastUsedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder MediaFolder? @relation(fields: [folderId], references: [id])
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([type])
+  @@index([tags])
+}
+
+model MediaFolder {
+  id        String   @id @default(cuid())
+  userId    String
+  parentId  String?
+  name      String
+  color     String   @default("#6366F1")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   MediaFolder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children MediaFolder[] @relation("FolderHierarchy")
+  assets   MediaAsset[]
+
+  @@index([userId])
+  @@index([parentId])
+}
+
+enum MediaAssetType {
+  IMAGE
+  VIDEO
+  GIF
+  DOCUMENT
+}
+
+// ============================================
+// CAMPAIGN MANAGER
+// ============================================
+
+model Campaign {
+  id            String         @id @default(cuid())
+  userId        String
+  name          String
+  description   String?        @db.Text
+  status        CampaignStatus @default(DRAFT)
+
+  // Goals & Targeting
+  objective     String?        // awareness, engagement, traffic, conversions
+  targetAudience String?       @db.Text
+  platforms     String[]       @default([])
+
+  // Budget & Schedule
+  budget        Float?
+  budgetSpent   Float          @default(0)
+  startDate     DateTime?
+  endDate       DateTime?
+
+  // UTM Tracking
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+
+  // Hashtags & Tags
+  hashtags      String[]       @default([])
+  tags          String[]       @default([])
+
+  // Stats
+  totalPosts    Int            @default(0)
+  postsPublished Int           @default(0)
+  totalReach    Int            @default(0)
+  totalEngagement Int          @default(0)
+  totalClicks   Int            @default(0)
+  totalConversions Int         @default(0)
+
+  // Colors for visual identification
+  color         String         @default("#6366F1")
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts         CampaignPost[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model CampaignPost {
+  id            String   @id @default(cuid())
+  campaignId    String
+  postId        String?  // Link to actual Post model
+  platform      String
+  content       String   @db.Text
+  mediaUrls     String[] @default([])
+  scheduledFor  DateTime?
+  publishedAt   DateTime?
+  status        String   @default("draft") // draft, scheduled, published, failed
+
+  // Performance metrics
+  reach         Int      @default(0)
+  impressions   Int      @default(0)
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  shares        Int      @default(0)
+  clicks        Int      @default(0)
+  engagement    Float    @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+// ============================================
+// APPROVAL WORKFLOW
+// ============================================
+
+model ApprovalRequest {
+  id            String         @id @default(cuid())
+  workspaceId   String?
+  postId        String         @unique
+  requesterId   String
+  status        ApprovalStatus @default(PENDING)
+  priority      String         @default("normal") // low, normal, high, urgent
+  dueDate       DateTime?
+  notes         String?        @db.Text
+
+  // Tracking
+  submittedAt   DateTime       @default(now())
+  reviewedAt    DateTime?
+  reviewedBy    String?
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  post          Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comments      ApprovalComment[]
+
+  @@index([workspaceId])
+  @@index([requesterId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model ApprovalComment {
+  id          String   @id @default(cuid())
+  requestId   String
+  userId      String
+  userName    String
+  content     String   @db.Text
+  type        String   @default("comment") // comment, change_request, approval, rejection
+  createdAt   DateTime @default(now())
+
+  request     ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model ApprovalSettings {
+  id                  String   @id @default(cuid())
+  workspaceId         String   @unique
+  requireApproval     Boolean  @default(true)
+  autoApproveRoles    String[] @default([])
+  notifyOnSubmit      Boolean  @default(true)
+  notifyOnApproval    Boolean  @default(true)
+  notifyOnRejection   Boolean  @default(true)
+  defaultApprovers    String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  CANCELLED
 }
