@@ -256,16 +256,17 @@ export async function executeConditionalAction(
           result.message = "No comment content specified";
           return result;
         }
-        // In production, this would call the X API to add a reply
-        // For now, we'll just log and mark as success
-        console.log(
-          `[Conditional] Would add comment to post ${post.id}: ${rule.actionContent}`
-        );
         if (xAccount && post.platformPostId) {
-          // TODO: Implement actual X API call to reply to tweet
-          // await replyToTweet(xAccount.accessToken, post.platformPostId, rule.actionContent);
+          // Import and use X client to reply
+          const { replyToTweet } = await import("./x-client");
+          const replyResult = await replyToTweet(
+            xAccount.accessToken,
+            post.platformPostId,
+            rule.actionContent
+          );
           result.success = true;
-          result.message = `Comment added to post: ${rule.actionContent.substring(0, 50)}...`;
+          result.message = `Comment added (ID: ${replyResult.id}): ${rule.actionContent.substring(0, 50)}...`;
+          console.log(`[Conditional] Added comment to post ${post.id}: ${rule.actionContent}`);
         } else {
           result.message = "Missing X account or platform post ID";
         }
@@ -276,44 +277,82 @@ export async function executeConditionalAction(
           result.message = "No DM template specified";
           return result;
         }
-        console.log(
-          `[Conditional] Would send DM for post ${post.id}: ${rule.actionContent}`
-        );
-        // TODO: Implement DM sending logic
-        result.success = true;
-        result.message = "DM notification queued";
+        if (xAccount) {
+          // Send DM to the post author (self) or a configured recipient
+          // For conditional rules on own posts, this typically notifies the user
+          const { sendDirectMessage } = await import("./x-client");
+
+          // Replace template variables in DM content
+          let dmContent = rule.actionContent;
+          dmContent = dmContent.replace("{post_content}", post.content.substring(0, 100));
+          dmContent = dmContent.replace("{metric}", rule.triggerMetric);
+          dmContent = dmContent.replace("{value}", rule.triggerValue.toString());
+          dmContent = dmContent.replace("{likes}", post.likes.toString());
+          dmContent = dmContent.replace("{retweets}", post.retweets.toString());
+
+          // Send to self (notification style) - user can configure different recipient
+          await sendDirectMessage(
+            xAccount.accessToken,
+            xAccount.xUserId,
+            dmContent
+          );
+          result.success = true;
+          result.message = "DM notification sent";
+          console.log(`[Conditional] Sent DM for post ${post.id}`);
+        } else {
+          result.message = "Missing X account";
+        }
         break;
 
       case ConditionalAction.RETWEET:
-        console.log(`[Conditional] Would retweet post ${post.id}`);
         if (xAccount && post.platformPostId) {
-          // TODO: Implement actual X API call to retweet
-          // await retweetTweet(xAccount.accessToken, post.platformPostId);
+          // Import and use X client to retweet
+          const { retweet } = await import("./x-client");
+          await retweet(
+            xAccount.accessToken,
+            xAccount.xUserId,
+            post.platformPostId
+          );
           result.success = true;
-          result.message = "Post retweeted";
+          result.message = "Post retweeted successfully";
+          console.log(`[Conditional] Retweeted post ${post.id}`);
         } else {
           result.message = "Missing X account or platform post ID";
         }
         break;
 
       case ConditionalAction.PIN_POST:
-        console.log(`[Conditional] Would pin post ${post.id}`);
         if (xAccount && post.platformPostId) {
-          // TODO: Implement actual X API call to pin tweet
-          // await pinTweet(xAccount.accessToken, post.platformPostId);
+          // Import and use X client to pin tweet
+          const { pinTweet } = await import("./x-client");
+          await pinTweet(
+            xAccount.accessToken,
+            xAccount.xUserId,
+            post.platformPostId
+          );
           result.success = true;
           result.message = "Post pinned to profile";
+          console.log(`[Conditional] Pinned post ${post.id}`);
         } else {
           result.message = "Missing X account or platform post ID";
         }
         break;
 
       case ConditionalAction.NOTIFY:
-        console.log(`[Conditional] Would send notification for post ${post.id}`);
-        // Create an in-app notification or send email
-        // TODO: Implement notification system integration
+        // Send email notification using the email system
+        const { queueEmail } = await import("./email");
+        await queueEmail(post.userId, "ENGAGEMENT_ALERT", {
+          content: post.content,
+          likes: post.likes,
+          retweets: post.retweets,
+          replies: post.replies,
+          postUrl: post.platformPostId
+            ? `https://x.com/i/status/${post.platformPostId}`
+            : undefined,
+        });
         result.success = true;
         result.message = `Notification sent: Post reached ${rule.triggerValue} ${rule.triggerMetric}`;
+        console.log(`[Conditional] Sent notification for post ${post.id}`);
         break;
 
       default:

@@ -86,7 +86,7 @@ describe("Content Categories", () => {
 
       (prisma.contentCategory.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      const { getCategories } = await import("@/lib/categories");
+      const { getCategories } = await import("@/lib/content-categories");
       const categories = await getCategories("user123");
 
       expect(categories).toHaveLength(2);
@@ -102,7 +102,7 @@ describe("Content Categories", () => {
         color: "#FF0000",
       });
 
-      const { createCategory } = await import("@/lib/categories");
+      const { createCategory } = await import("@/lib/content-categories");
       const category = await createCategory("user123", {
         name: "New Category",
         color: "#FF0000",
@@ -120,7 +120,7 @@ describe("Content Categories", () => {
         categoryId: "cat1",
       });
 
-      const { assignPostToCategory } = await import("@/lib/categories");
+      const { assignPostToCategory } = await import("@/lib/content-categories");
       const result = await assignPostToCategory("post1", "cat1");
 
       expect(result.categoryId).toBe("cat1");

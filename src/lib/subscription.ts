@@ -128,9 +128,16 @@ export async function canPerformAction(
 ): Promise<{ allowed: boolean; current: number; limit: number; message?: string }> {
   const subscription = await getOrCreateSubscription(userId);
 
-  const usageKey = action === "AI_GENERATIONS" ? "aiGenerations" :
-                   action === "SCHEDULED_POSTS" ? "scheduledPosts" : "xAccounts";
+  // Map all usage types to their corresponding keys
+  const usageKeyMap: Record<UsageType, keyof typeof subscription.usage> = {
+    AI_GENERATIONS: "aiGenerations",
+    SCHEDULED_POSTS: "scheduledPosts",
+    X_ACCOUNTS: "xAccounts",
+    IMAGE_GENERATIONS: "imageGenerations",
+    TEAM_MEMBERS: "teamMembers",
+  };
 
+  const usageKey = usageKeyMap[action];
   const { count, limit } = subscription.usage[usageKey];
 
   // -1 means unlimited

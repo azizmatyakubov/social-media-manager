@@ -462,6 +462,46 @@ function escapeRegex(string: string): string {
 }
 
 /**
+ * Get today's date at midnight for comparison
+ */
+function getTodayMidnight(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+/**
+ * Check if a date is today
+ */
+function isToday(date: Date | null): boolean {
+  if (!date) return false;
+  const today = getTodayMidnight();
+  const compareDate = new Date(date);
+  compareDate.setHours(0, 0, 0, 0);
+  return today.getTime() === compareDate.getTime();
+}
+
+/**
+ * Get the effective daily triggered count for a rule
+ * Returns 0 if the dailyCountDate is not today (count has reset)
+ */
+async function getEffectiveDailyCount(ruleId: string): Promise<number> {
+  const rule = await prisma.autoDmRule.findUnique({
+    where: { id: ruleId },
+    select: { dailyTriggeredCount: true, dailyCountDate: true },
+  });
+
+  if (!rule) return 0;
+
+  // If dailyCountDate is not today, the count should be considered 0
+  if (!isToday(rule.dailyCountDate)) {
+    return 0;
+  }
+
+  return rule.dailyTriggeredCount;
+}
+
+/**
  * Process a comment against all rules
  */
 export async function processComment(
@@ -496,17 +536,14 @@ export async function processComment(
       }
     }
 
-    // Check daily DM limit
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Check daily DM limit using proper daily counter
+    const dailyCount = await getEffectiveDailyCount(rule.id);
 
-    // For simplicity, we check triggered count for today
-    // In production, you'd want a separate daily counter
-    if (rule.triggeredCount >= rule.maxDailyDms) {
+    if (dailyCount >= rule.maxDailyDms) {
       return {
         matchedRule: rule,
         shouldSendDm: false,
-        reason: `Daily DM limit (${rule.maxDailyDms}) reached`,
+        reason: `Daily DM limit (${rule.maxDailyDms}) reached (${dailyCount} sent today)`,
       };
     }
 
@@ -524,7 +561,7 @@ export async function processComment(
 }
 
 /**
- * Send an auto DM (placeholder - actual implementation depends on platform)
+ * Send an auto DM via X/Twitter API
  */
 export async function sendAutoDm(
   userId: string,
@@ -540,26 +577,68 @@ export async function sendAutoDm(
     }
   }
 
-  // TODO: Implement actual DM sending via X/Twitter API
-  // This would require the user's access token and the recipient's user ID
-  console.log(`[AutoDM] Would send DM to ${recipientId}: ${message}`);
+  try {
+    // Get user's X account
+    const xAccount = await prisma.xAccount.findFirst({
+      where: { userId },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    });
 
-  // For now, return success placeholder
-  return {
-    success: true,
-    messageId: `dm_${Date.now()}`,
-  };
+    if (!xAccount) {
+      return {
+        success: false,
+        error: "No X account connected",
+      };
+    }
+
+    // Import and use X client to send DM
+    const { sendDirectMessage } = await import("./x-client");
+    const result = await sendDirectMessage(
+      xAccount.accessToken,
+      recipientId,
+      message
+    );
+
+    console.log(`[AutoDM] Sent DM to ${recipientId}: ${message.substring(0, 50)}...`);
+
+    return {
+      success: true,
+      messageId: result.eventId || result.messageId,
+    };
+  } catch (error) {
+    console.error(`[AutoDM] Failed to send DM to ${recipientId}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send DM",
+    };
+  }
 }
 
 /**
  * Record that a DM was triggered and update stats
  */
 export async function recordDmTrigger(ruleId: string): Promise<void> {
+  const now = new Date();
+  const today = getTodayMidnight();
+
+  // First, get the current rule to check if we need to reset daily count
+  const rule = await prisma.autoDmRule.findUnique({
+    where: { id: ruleId },
+    select: { dailyCountDate: true },
+  });
+
+  // Determine if we need to reset the daily counter (new day)
+  const needsReset = !rule?.dailyCountDate || !isToday(rule.dailyCountDate);
+
   await prisma.autoDmRule.update({
     where: { id: ruleId },
     data: {
+      // Lifetime counter
       triggeredCount: { increment: 1 },
-      lastTriggered: new Date(),
+      lastTriggered: now,
+      // Daily counter - reset to 1 if new day, otherwise increment
+      dailyTriggeredCount: needsReset ? 1 : { increment: 1 },
+      dailyCountDate: today,
     },
   });
 }
@@ -572,6 +651,8 @@ export async function getAutoDmStats(ruleId: string): Promise<{
   lastTriggered: Date | null;
   isActive: boolean;
   dailyAverage: number;
+  todayCount: number;
+  maxDailyDms: number;
 } | null> {
   const rule = await prisma.autoDmRule.findUnique({
     where: { id: ruleId },
@@ -580,6 +661,9 @@ export async function getAutoDmStats(ruleId: string): Promise<{
       lastTriggered: true,
       isActive: true,
       createdAt: true,
+      dailyTriggeredCount: true,
+      dailyCountDate: true,
+      maxDailyDms: true,
     },
   });
 
@@ -594,11 +678,16 @@ export async function getAutoDmStats(ruleId: string): Promise<{
   );
   const dailyAverage = rule.triggeredCount / daysActive;
 
+  // Get effective today count (0 if dailyCountDate is not today)
+  const todayCount = isToday(rule.dailyCountDate) ? rule.dailyTriggeredCount : 0;
+
   return {
     triggeredCount: rule.triggeredCount,
     lastTriggered: rule.lastTriggered,
     isActive: rule.isActive,
     dailyAverage: Math.round(dailyAverage * 100) / 100,
+    todayCount,
+    maxDailyDms: rule.maxDailyDms,
   };
 }
 
@@ -626,13 +715,29 @@ export async function toggleAutoDmRule(
 }
 
 /**
- * Reset daily DM counter (should be called by a daily cron job)
+ * Reset daily DM counters for all rules where the date is not today
+ * This can be called by a daily cron job, but is also handled automatically
+ * in recordDmTrigger when a new day starts
  */
 export async function resetDailyDmCounters(): Promise<number> {
-  // In production, you'd have a separate dailyTriggeredCount field
-  // For now, this is a placeholder
-  console.log("[AutoDM] Daily DM counters reset");
-  return 0;
+  const today = getTodayMidnight();
+
+  // Reset all rules where dailyCountDate is not today
+  const result = await prisma.autoDmRule.updateMany({
+    where: {
+      OR: [
+        { dailyCountDate: null },
+        { dailyCountDate: { lt: today } },
+      ],
+    },
+    data: {
+      dailyTriggeredCount: 0,
+      dailyCountDate: today,
+    },
+  });
+
+  console.log(`[AutoDM] Reset daily DM counters for ${result.count} rules`);
+  return result.count;
 }
 
 /**

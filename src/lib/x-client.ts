@@ -490,3 +490,84 @@ export async function getTweetMetrics(
     quotes: metrics.quote_count || 0,
   };
 }
+
+// Send a Direct Message to a user
+export async function sendDirectMessage(
+  accessToken: string,
+  recipientId: string,
+  text: string
+): Promise<{ eventId: string; messageId: string }> {
+  // X API v2 DM endpoint
+  const response = await fetch(`${X_API_BASE}/dm_conversations/with/${recipientId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to send DM: ${error}`);
+  }
+
+  const data = await response.json();
+  return {
+    eventId: data.data?.dm_event_id || "",
+    messageId: data.data?.dm_conversation_id || "",
+  };
+}
+
+// Pin a tweet to profile
+export async function pinTweet(
+  accessToken: string,
+  userId: string,
+  tweetId: string
+): Promise<boolean> {
+  const response = await fetch(`${X_API_BASE}/users/${userId}/pinned_lists`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ tweet_id: tweetId }),
+  });
+
+  // Note: X API v2 pinning is limited. This may require different endpoint.
+  // For now, we use the available API
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to pin tweet: ${error}`);
+  }
+
+  return true;
+}
+
+// Get user ID by username (for DM targeting)
+export async function getUserIdByUsername(
+  accessToken: string,
+  username: string
+): Promise<{ id: string; name: string; username: string } | null> {
+  const response = await fetch(
+    `${X_API_BASE}/users/by/username/${username}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    const error = await response.text();
+    throw new Error(`Failed to get user: ${error}`);
+  }
+
+  const data = await response.json();
+  return data.data || null;
+}

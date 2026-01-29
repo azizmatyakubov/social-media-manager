@@ -153,9 +153,17 @@ export async function publishInstagramCarousel(
   imageUrls: string[],
   caption: string
 ) {
-  // Create containers for each image
-  const childContainers = await Promise.all(
-    imageUrls.map(async (imageUrl) => {
+  if (!imageUrls || imageUrls.length < 2) {
+    throw new Error("Carousel requires at least 2 images");
+  }
+
+  if (imageUrls.length > 10) {
+    throw new Error("Carousel cannot have more than 10 images");
+  }
+
+  // Create containers for each image with proper error handling
+  const childContainerResults = await Promise.all(
+    imageUrls.map(async (imageUrl, index) => {
       const response = await fetch(`${FACEBOOK_GRAPH_URL}/${userId}/media`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -165,9 +173,24 @@ export async function publishInstagramCarousel(
           access_token: accessToken,
         }),
       });
-      return response.json();
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to create carousel item ${index + 1}: ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.id) {
+        throw new Error(`Failed to create carousel item ${index + 1}: no container ID returned`);
+      }
+
+      return data;
     })
   );
+
+  // Verify all child containers were created successfully
+  const childIds = childContainerResults.map((c) => c.id);
 
   // Create carousel container
   const carouselResponse = await fetch(`${FACEBOOK_GRAPH_URL}/${userId}/media`, {
@@ -176,12 +199,21 @@ export async function publishInstagramCarousel(
     body: JSON.stringify({
       media_type: "CAROUSEL",
       caption,
-      children: childContainers.map((c) => c.id),
+      children: childIds,
       access_token: accessToken,
     }),
   });
 
+  if (!carouselResponse.ok) {
+    const errorText = await carouselResponse.text();
+    throw new Error(`Failed to create carousel container: ${errorText}`);
+  }
+
   const carousel = await carouselResponse.json();
+
+  if (!carousel.id) {
+    throw new Error("Failed to create carousel container: no container ID returned");
+  }
 
   // Publish
   const publishResponse = await fetch(`${FACEBOOK_GRAPH_URL}/${userId}/media_publish`, {
@@ -192,6 +224,11 @@ export async function publishInstagramCarousel(
       access_token: accessToken,
     }),
   });
+
+  if (!publishResponse.ok) {
+    const errorText = await publishResponse.text();
+    throw new Error(`Failed to publish carousel: ${errorText}`);
+  }
 
   return publishResponse.json();
 }
@@ -215,21 +252,50 @@ export async function publishInstagramReel(
     }),
   });
 
+  if (!containerResponse.ok) {
+    const error = await containerResponse.text();
+    throw new Error(`Failed to create reel container: ${error}`);
+  }
+
   const container = await containerResponse.json();
 
-  // Wait for video processing
+  if (!container.id) {
+    throw new Error("Failed to create reel container: no container ID returned");
+  }
+
+  // Wait for video processing with timeout and max retries
+  const MAX_RETRIES = 60; // 60 retries * 5 seconds = 5 minutes max
+  const POLL_INTERVAL = 5000; // 5 seconds
   let status = "IN_PROGRESS";
-  while (status === "IN_PROGRESS") {
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+  let retries = 0;
+
+  while (status === "IN_PROGRESS" && retries < MAX_RETRIES) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+    retries++;
+
     const statusResponse = await fetch(
       `${FACEBOOK_GRAPH_URL}/${container.id}?fields=status_code&access_token=${accessToken}`
     );
+
+    if (!statusResponse.ok) {
+      throw new Error(`Failed to check video processing status: ${statusResponse.status}`);
+    }
+
     const statusData = await statusResponse.json();
     status = statusData.status_code;
+
+    // Handle unexpected statuses
+    if (status && status !== "IN_PROGRESS" && status !== "FINISHED") {
+      throw new Error(`Video processing failed with status: ${status}`);
+    }
+  }
+
+  if (retries >= MAX_RETRIES) {
+    throw new Error("Video processing timed out after 5 minutes");
   }
 
   if (status !== "FINISHED") {
-    throw new Error("Video processing failed");
+    throw new Error(`Video processing failed with status: ${status}`);
   }
 
   // Publish
@@ -241,6 +307,11 @@ export async function publishInstagramReel(
       access_token: accessToken,
     }),
   });
+
+  if (!publishResponse.ok) {
+    const error = await publishResponse.text();
+    throw new Error(`Failed to publish reel: ${error}`);
+  }
 
   return publishResponse.json();
 }

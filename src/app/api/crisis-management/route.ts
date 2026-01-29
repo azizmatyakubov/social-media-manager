@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
         const alert = createCrisisAlert(session.user.id, {
           type,
           severity,
+          status: "detected",
           platform,
           title,
           description: description || "",
@@ -137,6 +138,10 @@ export async function POST(request: NextRequest) {
           sourceUrl,
           sourceAuthor,
           affectedAccounts: affectedAccounts || [],
+          keywords: [],
+          mentionCount: 0,
+          sentimentScore: 0,
+          affectedAudience: 0,
         });
         return NextResponse.json({ alert });
       }
@@ -187,6 +192,8 @@ export async function POST(request: NextRequest) {
           content,
           sentBy: sentBy || session.user.name || "User",
           platform,
+          status: "draft",
+          createdBy: session.user.id,
           success,
           engagementMetrics,
         });
@@ -261,8 +268,10 @@ export async function POST(request: NextRequest) {
           name,
           type,
           conditions: conditions || [],
+          actions: [],
           severity: severity || "medium",
           platforms: platforms || [],
+          enabled: isEnabled !== false,
           isEnabled: isEnabled !== false,
           autoRespond: autoRespond || false,
           responseTemplateId,

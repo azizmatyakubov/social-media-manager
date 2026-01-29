@@ -18,6 +18,9 @@ export interface CrisisAlert {
   description: string;
   platform: string;
   sourceUrl?: string;
+  sourceContent?: string;
+  sourceAuthor?: string;
+  affectedAccounts?: string[];
   mentionCount: number;
   sentimentScore: number; // -1 to 1
   keywords: string[];
@@ -34,9 +37,13 @@ export interface CrisisAlert {
 export interface CrisisResponse {
   id: string;
   crisisId: string;
+  type?: string;
   content: string;
+  sentBy?: string;
   platform: string;
   status: "draft" | "approved" | "published";
+  success?: boolean;
+  engagementMetrics?: Record<string, number>;
   publishedAt?: Date;
   createdBy: string;
   createdAt: Date;
@@ -56,7 +63,10 @@ export interface ResponseTemplate {
   name: string;
   category: string;
   content: string;
+  tone?: string;
+  platforms?: string[];
   variables: string[];
+  isDefault?: boolean;
   usageCount: number;
   createdAt: Date;
 }
@@ -65,7 +75,10 @@ export interface AlertRule {
   id: string;
   userId: string;
   name: string;
+  type?: string;
   enabled: boolean;
+  isEnabled?: boolean;
+  platforms?: string[];
   conditions: {
     type: "sentiment" | "volume" | "keyword" | "competitor";
     operator: "gt" | "lt" | "eq" | "contains";
@@ -76,6 +89,8 @@ export interface AlertRule {
     config: Record<string, any>;
   }[];
   severity: CrisisSeverity;
+  autoRespond?: boolean;
+  responseTemplateId?: string;
   createdAt: Date;
 }
 

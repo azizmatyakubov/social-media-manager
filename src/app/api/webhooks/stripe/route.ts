@@ -195,13 +195,20 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  const invoiceData = invoice as unknown as { subscription: string | null; customer: string };
+  const invoiceData = invoice as unknown as {
+    subscription: string | null;
+    customer: string;
+    amount_due?: number;
+    currency?: string;
+    hosted_invoice_url?: string;
+  };
   if (!invoiceData.subscription) return;
 
   const customerId = invoiceData.customer;
 
   const userSubscription = await prisma.subscription.findUnique({
     where: { stripeCustomerId: customerId },
+    include: { user: { select: { id: true, email: true, name: true } } },
   });
 
   if (!userSubscription) return;
@@ -212,7 +219,25 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
     data: { status: "PAST_DUE" },
   });
 
-  // TODO: Send email notification about failed payment
+  // Send email notification about failed payment
+  const { queueEmail } = await import("@/lib/email");
+
+  // Format the amount
+  const amountDue = invoiceData.amount_due
+    ? (invoiceData.amount_due / 100).toFixed(2)
+    : "0.00";
+  const currency = (invoiceData.currency || "usd").toUpperCase();
+
+  await queueEmail(userSubscription.userId, "SUBSCRIPTION_CHANGE", {
+    action: "Payment Failed",
+    plan: userSubscription.plan,
+    amount: `${currency} ${amountDue}`,
+    invoiceUrl: invoiceData.hosted_invoice_url,
+    nextBillingDate: userSubscription.currentPeriodEnd?.toLocaleDateString(),
+    message: `Your payment of ${currency} ${amountDue} failed. Please update your payment method to continue your subscription.`,
+  });
+
+  console.log(`Payment failed notification sent to user ${userSubscription.userId}`);
 }
 
 function mapStripeStatus(status: Stripe.Subscription.Status) {

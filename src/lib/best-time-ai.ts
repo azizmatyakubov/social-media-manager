@@ -24,10 +24,54 @@ export interface BestTimeAnalysis {
   };
 }
 
+// Get user's timezone from their posting config
+async function getUserTimezone(userId: string): Promise<string> {
+  const config = await prisma.postingConfig.findUnique({
+    where: { userId },
+    select: { timezone: true },
+  });
+  return config?.timezone || "UTC";
+}
+
+// Convert date to user's timezone for analysis
+function getDateInTimezone(date: Date, timezone: string): Date {
+  try {
+    // Get the date string in the target timezone
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    };
+    const formatter = new Intl.DateTimeFormat("en-US", options);
+    const parts = formatter.formatToParts(date);
+
+    const partValues: Record<string, string> = {};
+    parts.forEach((part) => {
+      partValues[part.type] = part.value;
+    });
+
+    // Create a new date with the timezone-adjusted values
+    const adjustedDate = new Date(date);
+    adjustedDate.setHours(parseInt(partValues.hour || "0", 10));
+    adjustedDate.setMinutes(parseInt(partValues.minute || "0", 10));
+
+    return adjustedDate;
+  } catch {
+    return date;
+  }
+}
+
 // Analyze user's historical data to find best posting times
 export async function analyzeOptimalPostingTimes(
   userId: string
 ): Promise<BestTimeAnalysis> {
+  // Get user's timezone
+  const userTimezone = await getUserTimezone(userId);
+
   // Get user's posted content with engagement
   const posts = await prisma.post.findMany({
     where: {
@@ -64,8 +108,10 @@ export async function analyzeOptimalPostingTimes(
   posts.forEach((post) => {
     if (!post.postedAt) return;
 
-    const hour = post.postedAt.getHours();
-    const day = days[post.postedAt.getDay()];
+    // Convert to user's timezone for accurate hour/day analysis
+    const localDate = getDateInTimezone(post.postedAt, userTimezone);
+    const hour = localDate.getHours();
+    const day = days[localDate.getDay()];
     const engagementRate =
       ((post.likes + post.retweets + post.replies) / (post.impressions || 1)) *
       100;
@@ -161,7 +207,7 @@ export async function analyzeOptimalPostingTimes(
         .slice(0, 3)
         .map((h) => `${h.hour.toString().padStart(2, "0")}:00`),
       mostActiveDays: topDays.slice(0, 3).map((d) => d.day),
-      timezone: "UTC", // TODO: Get user's timezone
+      timezone: userTimezone,
     },
     recommendations: generateRecommendations(hourlyAverages, dailyAverages),
     nextBestSlot,

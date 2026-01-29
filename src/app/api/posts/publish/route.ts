@@ -11,8 +11,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Parse request body once and store postId for use in catch block
+  let postId: string | undefined;
+
   try {
-    const { postId } = await request.json();
+    const body = await request.json();
+    postId = body.postId;
 
     if (!postId) {
       return NextResponse.json({ error: "Post ID required" }, { status: 400 });
@@ -83,8 +87,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Publish post error:", error);
 
-    // Update post with error
-    const { postId } = await request.json().catch(() => ({}));
+    // Update post with error (postId is already available from earlier parsing)
     if (postId) {
       await prisma.post.update({
         where: { id: postId },
